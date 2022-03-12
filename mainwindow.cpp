@@ -627,7 +627,7 @@ void MainWindow::on_correlatorClient_parse(){
     unsigned int lcpVisColumnOffset;
     unsigned int rcpVisColumnOffset;
     unsigned int bytesInBuffer = 0;
-    unsigned int currentTime;
+    qint64 currentPacketTime = 0;
     tPkg_Head* pCorrHead =  reinterpret_cast<tPkg_Head*>(correlatorRawBuffer);
     tPkg_Dt* pCorrData = reinterpret_cast<tPkg_Dt*>(correlatorRawBuffer + sizeof(tPkg_Head));
     tConfigure* pConf = reinterpret_cast<tConfigure*>(correlatorRawBuffer + sizeof(tPkg_Head));
@@ -703,12 +703,24 @@ void MainWindow::on_correlatorClient_parse(){
                 if (pCorrData->Blck.DtBlck.Offset == 0){
                     std::memcpy(dataPacket + pCorrData->Blck.DtBlck.Offset, pCorrData->Blck.pU8 + sizeof(tConfigure) + sizeof(tDtBlock), pCorrData->Blck.DtBlck.DtSz);
                     currentPolarization = pCorrData->Blck.Cfg.InfoSpiDrv.StsSpi.Plrztn;
+                    if (currentPolarization == showPolarization && currentFrequency == showFrequency){
+                        ui->logText->append("Tbox " + QString::number(pCorrData->Blck.Cfg.Temprtr));
+                        ui->logText->append("Tfpga " + QString::number(pCorrData->Blck.Cfg.InfoSpiDrv.StsSpi.Tfpga - 128));
+                    }
                     currentFrequency = 0;
-                    currentTime = pCorrData->Blck.Cfg.TimeDMA;
                     for (unsigned int f = 0;f < frequencyListSize;++f)
                         if (pCorrData->Blck.Cfg.InfoSpiDrv.Frequency == frequencyList[f]){
                                 currentFrequency = f;
                         }
+
+                    currentPacketTime = pCorrData->Blck.Cfg.InfoSpiDrv.Time * 1000L + pCorrData->Blck.Cfg.InfoSpiDrv.TimePrescaler / 100000L;
+//********
+                    QTime curT = QTime::currentTime();
+                    QDateTime corrT = QDateTime::fromMSecsSinceEpoch(currentPacketTime);
+                    ui->logText->append("Local time " + QString::number(curT.msecsSinceStartOfDay()));
+                    ui->logText->append("Packet time " + QString::number(corrT.time().msecsSinceStartOfDay()));
+//********
+
                 } else
                     std::memcpy(dataPacket + pCorrData->Blck.DtBlck.Offset, pCorrData->Blck.pU8, pCorrData->Blck.DtBlck.DtSz);
 
@@ -760,14 +772,14 @@ void MainWindow::on_correlatorClient_parse(){
                     rcpVisColumnOffset = rcpFullPacketNumber / frequencyListSize * numberOfFitsVisibilities;
 
                     QTime curTime = QTime::currentTime();
+                    QDateTime packetDateTime = QDateTime::fromMSecsSinceEpoch(currentPacketTime);
                     int64_t* pAmplitude = pAnt0;
                     int64_t* pVisibility = reinterpret_cast<int64_t*>(dataPacket  + sizeof(tConfigure));
                     if (currentPolarization == 1 && lcpFullPacketNumber < fullPacketsInFits){
                         QString msg;
-//                        msg.sprintf("LCP frequency %d", currentFrequency);
-//                        ui->logText->append(msg);
                         freqColumn[currentFrequency] = frequencyList[currentFrequency];
-                        timeColumn[currentFrequency][lcpFullPacketNumber / frequencyListSize] = curTime.msecsSinceStartOfDay() * 0.001;
+//                        timeColumn[currentFrequency][lcpFullPacketNumber / frequencyListSize] = curTime.msecsSinceStartOfDay() * 0.001;
+                        timeColumn[currentFrequency][lcpFullPacketNumber / frequencyListSize] = packetDateTime.time().msecsSinceStartOfDay() * 0.001;
                         for(unsigned int lcpAmp = 0;lcpAmp < numberOfFitsAmplitudes;++lcpAmp)
                             lcpAmpColumn[currentFrequency][lcpAmpColumnOffset + pAmpIndToFitsInd[lcpAmp]] = pAmplitude[pAmpIndToCorrPacketInd[lcpAmp]];
                         for(unsigned int lcpVis = 0;lcpVis < numberOfFitsVisibilities;++lcpVis){
@@ -821,7 +833,7 @@ void MainWindow::writeCurrentFits(){
     string antNameHduSign("SRH_ANT_NAMES");
     string antHduSign("SRH_ANT");
     string hduSign("SRH_DATA");
-    QString qFitsName = "currentData/SRH1224/" + QDateTime::currentDateTime().toString("yyyyMMdd") + "/srh_01224_" + QDateTime::currentDateTime().toString("yyyyMMddThhmmss") + ".fit";
+    QString qFitsName = "currentData/SRH1224/" + QDateTime::currentDateTime().toString("yyyyMMdd") + "/srh_1224_" + QDateTime::currentDateTime().toString("yyyyMMddThhmmss") + ".fit";
     const std::string fitsName = qFitsName.toStdString();
     std::vector<string> antNameColName(2,"");
     std::vector<string> antNameColForm(2,"");
@@ -989,6 +1001,7 @@ void MainWindow::initDigitalReceivers(){
     *(reinterpret_cast<float*>(&setRgPacket.D.Rg32.Rg[10])) = static_cast<float>(soldat.DD2Ddt2());  //d2Ddt2
     for (int rec = 0;rec < 13;++rec){
         setRgPacket.D.Rg32.Rg[1] = 1 << pAntennaReceiver[rec*16]; //receiver selected
+        ui->logText->append("DR " + QString::number(setRgPacket.D.Rg32.Rg[1]));
         for(int channel = 0;channel < 16;++channel){
             unsigned int r_c_ind = rec*16 + channel;
             setRgPacket.D.Rg32.Rg[channel*4 + 11] = antXColumn[r_c_ind]; //
@@ -996,7 +1009,7 @@ void MainWindow::initDigitalReceivers(){
             setRgPacket.D.Rg32.Rg[channel*4 + 13] = antZColumn[r_c_ind]; //
             setRgPacket.D.Rg32.Rg[channel*4 + 14] = pAntennaDelay[r_c_ind]; //
         }
-        pCorrelatorClient->write(reinterpret_cast<const char*>(&setRgPacket), sizeof(tPkg_Head) + setRgPacket.H.DtSz);
+        ui->logText->append("sent " + QString::number(pCorrelatorClient->write(reinterpret_cast<const char*>(&setRgPacket), sizeof(tPkg_Head) + setRgPacket.H.DtSz)));
     }
 
     ui->logText->append("Culmination " + QString::number(soldat.DCulmination()));
@@ -1089,6 +1102,7 @@ void MainWindow::on_antennaGainSpin_valueChanged(int gain){
     setRgPacket.D.Rg32.Rg[3] = 0x102 | (pAntennaReceiverChannel[showAntennaA] << 4); //virtual gain address for antenna in the receiver
     setRgPacket.D.Rg32.Rg[4] = gain; //
 
+    ui->logText->append("DR " + QString::number(setRgPacket.D.Rg32.Rg[1]) + " A " + QString::number(pAntennaReceiverChannel[showAntennaA]) + " G " + QString::number(setRgPacket.D.Rg32.Rg[4]));
     pCorrelatorClient->write(reinterpret_cast<const char*>(&setRgPacket), sizeof(tPkg_Head) + setRgPacket.H.DtSz);
 }
 

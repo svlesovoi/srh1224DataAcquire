@@ -57,7 +57,10 @@ typedef struct sPkgSPI {
             volatile uint Error:1;    /* Ошибки */
             volatile uint Valid:1;    /* Пока не используется  */
             volatile uint Plrztn:1;   /* Информация по поляризации */
-            volatile uint Rsrvd:28;   /* Резерв */
+//            volatile uint Rsrvd:28;   /* Резерв */
+            volatile uint Rsrvd:12;   /* Резерв */
+            volatile uint Tbox:8;   /* Резерв */
+            volatile uint Tfpga:8;   /* Резерв */
         };
     } StsSpi;
     union {
