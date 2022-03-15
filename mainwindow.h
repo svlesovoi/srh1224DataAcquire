@@ -306,6 +306,9 @@ private:
 
     tSyncDriverConfigure SyncDriverConfig;
     QG7M* localOscillator;
+    qint64 currentPacketTime;
+    int fpgaTemperature;
+    int fpgaTemperatureMaximum;
 };
 
 #endif // MAINWINDOW_H

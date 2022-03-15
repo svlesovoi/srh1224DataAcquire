@@ -44,6 +44,7 @@ MainWindow::MainWindow(QWidget *parent) :
     delayTracking = settings.value("receiver/delayTracking", 1).toBool();
     fringeStopping = settings.value("receiver/fringeStopping", 1).toBool();
     autoStart = settings.value("receiver/autoStart", 1).toBool();
+    fpgaTemperatureMaximum = settings.value("receiver/fpgaTemperatureMaximum", 80).toUInt();
 
     frequencyListSize = settings.value("FITS/frequencyListSize", 32).toUInt();
     frequencyList = new unsigned int[frequencyListSize];
@@ -220,8 +221,8 @@ MainWindow::MainWindow(QWidget *parent) :
             unsigned int V = pWestAntennaReceiver[j]*16 + pWestAntennaChannel[j];
             pVisIndToCorrPacketInd[visInd] = visibilityIndexAsHV(H, V);
             pVisibilitySign[visInd] = H > V ? 1 : -1;
-            pVis01224AntennaNameA[visInd] = pSouthAntennaName[i];
-            pVis01224AntennaNameB[visInd] = pWestAntennaName[j];
+            pVis01224AntennaNameA[visInd] = pWestAntennaName[j];
+            pVis01224AntennaNameB[visInd] = pSouthAntennaName[i];
         }
 //southCenter vis
         unsigned int visInd = i * (eastAntennaNumber + westAntennaNumber + 1) + westAntennaNumber;
@@ -229,8 +230,8 @@ MainWindow::MainWindow(QWidget *parent) :
         unsigned int V = centerAntennaReceiver*16 + centerAntennaChannel;
         pVisIndToCorrPacketInd[visInd] = visibilityIndexAsHV(H, V);
         pVisibilitySign[visInd] = H > V ? 1 : -1;
-        pVis01224AntennaNameA[visInd] = pSouthAntennaName[i];
-        pVis01224AntennaNameB[visInd] = centerAntennaName;
+        pVis01224AntennaNameA[visInd] = centerAntennaName;
+        pVis01224AntennaNameB[visInd] = pSouthAntennaName[i];
 
 //southEast vis
         for (unsigned j = 0;j < eastAntennaNumber;++j){
@@ -240,8 +241,8 @@ MainWindow::MainWindow(QWidget *parent) :
             unsigned int V = pEastAntennaReceiver[j]*16 + pEastAntennaChannel[j];
             pVisIndToCorrPacketInd[visInd] = visibilityIndexAsHV(H, V);
             pVisibilitySign[visInd] = H > V ? 1 : -1;
-            pVis01224AntennaNameA[visInd] = pSouthAntennaName[i];
-            pVis01224AntennaNameB[visInd] = pEastAntennaName[j];
+            pVis01224AntennaNameA[visInd] = pEastAntennaName[j];
+            pVis01224AntennaNameB[visInd] = pSouthAntennaName[i];
         }
     }
 //southSouth vis
@@ -315,6 +316,7 @@ MainWindow::MainWindow(QWidget *parent) :
     numberOfFitsVisibilities = vis01224Number;
     numberOfFitsAmplitudes = amp01224Number;
     numberOfShowVisibilities = 4;
+    currentPacketTime = 0;
     currentFrequency = 0;
     currentPolarization = 0;
     showFrequency = 0;
@@ -627,7 +629,6 @@ void MainWindow::on_correlatorClient_parse(){
     unsigned int lcpVisColumnOffset;
     unsigned int rcpVisColumnOffset;
     unsigned int bytesInBuffer = 0;
-    qint64 currentPacketTime = 0;
     tPkg_Head* pCorrHead =  reinterpret_cast<tPkg_Head*>(correlatorRawBuffer);
     tPkg_Dt* pCorrData = reinterpret_cast<tPkg_Dt*>(correlatorRawBuffer + sizeof(tPkg_Head));
     tConfigure* pConf = reinterpret_cast<tConfigure*>(correlatorRawBuffer + sizeof(tPkg_Head));
@@ -704,8 +705,8 @@ void MainWindow::on_correlatorClient_parse(){
                     std::memcpy(dataPacket + pCorrData->Blck.DtBlck.Offset, pCorrData->Blck.pU8 + sizeof(tConfigure) + sizeof(tDtBlock), pCorrData->Blck.DtBlck.DtSz);
                     currentPolarization = pCorrData->Blck.Cfg.InfoSpiDrv.StsSpi.Plrztn;
                     if (currentPolarization == showPolarization && currentFrequency == showFrequency){
-                        ui->logText->append("Tbox " + QString::number(pCorrData->Blck.Cfg.Temprtr));
-                        ui->logText->append("Tfpga " + QString::number(pCorrData->Blck.Cfg.InfoSpiDrv.StsSpi.Tfpga - 128));
+                        fpgaTemperature = pCorrData->Blck.Cfg.InfoSpiDrv.StsSpi.Tfpga - 128;
+                        ui->fpgaTemperatureLabel->setText('FPGA temperature ' + QString::number(fpgaTemperature));
                     }
                     currentFrequency = 0;
                     for (unsigned int f = 0;f < frequencyListSize;++f)
@@ -713,12 +714,12 @@ void MainWindow::on_correlatorClient_parse(){
                                 currentFrequency = f;
                         }
 
-                    currentPacketTime = pCorrData->Blck.Cfg.InfoSpiDrv.Time * 1000L + pCorrData->Blck.Cfg.InfoSpiDrv.TimePrescaler / 100000L;
 //********
-                    QTime curT = QTime::currentTime();
-                    QDateTime corrT = QDateTime::fromMSecsSinceEpoch(currentPacketTime);
-                    ui->logText->append("Local time " + QString::number(curT.msecsSinceStartOfDay()));
-                    ui->logText->append("Packet time " + QString::number(corrT.time().msecsSinceStartOfDay()));
+                    currentPacketTime = pCorrData->Blck.Cfg.InfoSpiDrv.Time * 1000L + pCorrData->Blck.Cfg.InfoSpiDrv.TimePrescaler / 100000L;
+//                    QTime curT = QTime::currentTime();
+//                    QDateTime corrT = QDateTime::fromMSecsSinceEpoch(currentPacketTime);
+//                    ui->logText->append("Local time " + QString::number(curT.msecsSinceStartOfDay()));
+//                    ui->logText->append("Packet time " + QString::number(corrT.time().msecsSinceStartOfDay()));
 //********
 
                 } else
@@ -771,14 +772,12 @@ void MainWindow::on_correlatorClient_parse(){
                     lcpVisColumnOffset = lcpFullPacketNumber / frequencyListSize * numberOfFitsVisibilities;
                     rcpVisColumnOffset = rcpFullPacketNumber / frequencyListSize * numberOfFitsVisibilities;
 
-                    QTime curTime = QTime::currentTime();
-                    QDateTime packetDateTime = QDateTime::fromMSecsSinceEpoch(currentPacketTime);
                     int64_t* pAmplitude = pAnt0;
                     int64_t* pVisibility = reinterpret_cast<int64_t*>(dataPacket  + sizeof(tConfigure));
                     if (currentPolarization == 1 && lcpFullPacketNumber < fullPacketsInFits){
                         QString msg;
+                        QDateTime packetDateTime = QDateTime::fromMSecsSinceEpoch(currentPacketTime);
                         freqColumn[currentFrequency] = frequencyList[currentFrequency];
-//                        timeColumn[currentFrequency][lcpFullPacketNumber / frequencyListSize] = curTime.msecsSinceStartOfDay() * 0.001;
                         timeColumn[currentFrequency][lcpFullPacketNumber / frequencyListSize] = packetDateTime.time().msecsSinceStartOfDay() * 0.001;
                         for(unsigned int lcpAmp = 0;lcpAmp < numberOfFitsAmplitudes;++lcpAmp)
                             lcpAmpColumn[currentFrequency][lcpAmpColumnOffset + pAmpIndToFitsInd[lcpAmp]] = pAmplitude[pAmpIndToCorrPacketInd[lcpAmp]];
@@ -786,21 +785,17 @@ void MainWindow::on_correlatorClient_parse(){
                             int64_t lcpInt64 = pVisibility[pVisIndToCorrPacketInd[lcpVis]];
                             float realLcpInt64 = *(int32_t*)&lcpInt64;
                             float imagLcpInt64 = *((int32_t*)&lcpInt64 + 1);
-//                            lcpVisColumn[currentFrequency][lcpVisColumnOffset + pVisIndToFitsInd[lcpVis]] = complex<float>(realLcpInt64,  imagLcpInt64);
                             lcpVisColumn[currentFrequency][lcpVisColumnOffset + lcpVis] = complex<float>(realLcpInt64,  imagLcpInt64);
                         }
                         ++lcpFullPacketNumber;
                     } else if (rcpFullPacketNumber < fullPacketsInFits){
                         QString msg;
-//                        msg.sprintf("RCP frequency %d", currentFrequency);
-//                        ui->logText->append(msg);
                         for(unsigned int rcpAmp = 0;rcpAmp < numberOfFitsAmplitudes;++rcpAmp)
                             rcpAmpColumn[currentFrequency][rcpAmpColumnOffset + pAmpIndToFitsInd[rcpAmp]] = pAmplitude[pAmpIndToCorrPacketInd[rcpAmp]];
                         for(unsigned int rcpVis = 0;rcpVis < numberOfFitsVisibilities;++rcpVis){
                             int64_t rcpInt64 = pVisibility[pVisIndToCorrPacketInd[rcpVis]];
                             float realRcpInt64 = *(int32_t*)&rcpInt64;
                             float imagRcpInt64 = *((int32_t*)&rcpInt64 + 1);
-//                            rcpVisColumn[currentFrequency][rcpVisColumnOffset + pVisIndToFitsInd[rcpVis]] = complex<float>(realRcpInt64, imagRcpInt64);
                             rcpVisColumn[currentFrequency][rcpVisColumnOffset + rcpVis] = complex<float>(realRcpInt64, imagRcpInt64);
                         }
                         ++rcpFullPacketNumber;
@@ -975,6 +970,12 @@ void MainWindow::writeCurrentFits(){
         pAntPairTable->column(antPairColName[1]).write(antBColumn, 1);
     } catch (FITS::CantCreate){
         ui->logText->append("FITS antenna pair table error");
+    }
+
+    if (fpgaTemperature > fpgaTemperatureMaximum){
+        syncDriverStartStop(false);
+        initCorrelator(false);
+        ui->logText->append("FPGA TEMPERATURE TOO HIGH!");
     }
 }
 
