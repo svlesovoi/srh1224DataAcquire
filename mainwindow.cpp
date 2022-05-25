@@ -702,10 +702,10 @@ void MainWindow::on_correlatorClient_parse(){
             pCorrelatorClient->read(reinterpret_cast<char*>(pCorrData), pCorrHead->DtSz);         //read data
             if(pCorrData->Blck.DtBlck.DtSz > 0 && pCorrData->Blck.DtBlck.DtSz <= dHlgrph_PkgBlckDtMaxSz) { //visibility data
                 if (pCorrData->Blck.DtBlck.Offset == 0){
-                    std::memcpy(dataPacket + pCorrData->Blck.DtBlck.Offset, pCorrData->Blck.pU8 + sizeof(tConfigure) + sizeof(tDtBlock), pCorrData->Blck.DtBlck.DtSz);
+                    std::memcpy(dataPacket + pCorrData->Blck.DtBlck.Offset, pCorrData->Blck.pU8, pCorrData->Blck.DtBlck.DtSz);
                     currentPolarization = pCorrData->Blck.Cfg.InfoSpiDrv.StsSpi.Plrztn;
                     if (currentPolarization == showPolarization && currentFrequency == showFrequency){
-                        fpgaTemperature = pCorrData->Blck.Cfg.InfoSpiDrv.StsSpi.Tfpga - 128;
+                        fpgaTemperature = pCorrData->Blck.Cfg.InfoSpiDrv.StsSpi.Tfpga;
                         ui->fpgaTemperatureLabel->setText('FPGA temperature ' + QString::number(fpgaTemperature));
                     }
                     currentFrequency = 0;
