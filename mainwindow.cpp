@@ -560,7 +560,7 @@ void MainWindow::on_SyncDriverConnect_clicked(bool checked){
 
 void MainWindow::on_SyncDriverGetConfigButton_clicked(){
     static tSyncDriverPkg SyncDriverPacket;
-    SyncDriverPacket.H.Rqst = eSyncDriverRqst_Rdr_GetCnfg;
+    SyncDriverPacket.H.Rqst = eSyncDriverRqst_Rdr_GetCnfgNew;
     SyncDriverPacket.H.isPacked = 0;
     SyncDriverPacket.H.HeadExtTp = 0x00;
     SyncDriverPacket.H.Magic = 0x05;
@@ -591,35 +591,46 @@ void MainWindow::on_SyncDriverSetConfigButton_clicked(bool checked){
 
 void MainWindow::syncDriverStartStop(bool start){
     static tSyncDriverPkg SyncDriverPacket;
-    SyncDriverPacket.H.Rqst = eSyncDriverRqst_Rdr_SetCnfg;
+    SyncDriverPacket.H.Rqst = eSyncDriverRqst_Rdr_SetCnfgNew;
+    SyncDriverPacket.H.isPacked = 0;
+    SyncDriverPacket.H.HeadExtTp = 0x00;
+    SyncDriverPacket.H.Magic = 0x05;
+    SyncDriverPacket.H.DtSz = 40;//sizeof(SyncDriverConfig);
+    std::memset(SyncDriverPacket.D.pU8,0,dHlgrphSS_PkgDtMaxSz);
+    SyncDriverPacket.D.CfgNew.FrqRange = SyncDriverFrqRange_12_24;
+    SyncDriverPacket.D.CfgNew.Configure.FSetDuration = SyncDriverConfig.FSetDuration;
+    SyncDriverPacket.D.CfgNew.Configure.PolarToggle = SyncDriverConfig.PolarToggle;
+    SyncDriverPacket.D.CfgNew.Configure.PolarSet = SyncDriverConfig.PolarSet;
+    SyncDriverPacket.D.CfgNew.Configure.HiTimeDuration = SyncDriverConfig.HiTimeDuration;
+    SyncDriverPacket.D.CfgNew.Configure.LowTimeDuration = SyncDriverConfig.LowTimeDuration;
+    SyncDriverPacket.D.CfgNew.Configure.NBand = SyncDriverConfig.NBand;
+    SyncDriverPacket.D.CfgNew.Configure.NCycle = SyncDriverConfig.NCycle;
+    SyncDriverPacket.D.CfgNew.Configure.NFSet = SyncDriverConfig.NFSet;
+    if (start)
+        SyncDriverPacket.D.CfgNew.Configure.Cntrl = 0x11;
+    else
+        SyncDriverPacket.D.CfgNew.Configure.Cntrl = 0x00;
+
+    ui->logText->append("size " + QString::number(SyncDriverPacket.H.DtSz));
+    ui->logText->append("FrqRange " + QString::number(SyncDriverPacket.D.CfgNew.FrqRange));
+    ui->logText->append("FSetDuration " + QString::number(SyncDriverPacket.D.CfgNew.Configure.FSetDuration));
+    ui->logText->append("PolarToggle " + QString::number(SyncDriverPacket.D.CfgNew.Configure.PolarToggle));
+    ui->logText->append("PolarSet " + QString::number(SyncDriverPacket.D.CfgNew.Configure.PolarSet));
+    ui->logText->append("HiTimeDuration " + QString::number(SyncDriverPacket.D.CfgNew.Configure.HiTimeDuration));
+    ui->logText->append("LowTimeDuration " + QString::number(SyncDriverPacket.D.CfgNew.Configure.LowTimeDuration));
+    ui->logText->append("NBand " + QString::number(SyncDriverPacket.D.CfgNew.Configure.NBand));
+    ui->logText->append("NCycle " + QString::number(SyncDriverPacket.D.CfgNew.Configure.NCycle));
+    ui->logText->append("NFSet " + QString::number(SyncDriverPacket.D.CfgNew.Configure.NFSet));
+    ui->logText->append("Cntrl " + QString::number(SyncDriverPacket.D.CfgNew.Configure.Cntrl,16));
+
+
+    pSyncDriverClient->write(reinterpret_cast<const char*>(&SyncDriverPacket), sizeof(tSyncDriverPkg_Head) + SyncDriverPacket.H.DtSz);
+
+    SyncDriverPacket.H.Rqst = eSyncDriverRqst_Rdr_GetCnfgNew;
     SyncDriverPacket.H.isPacked = 0;
     SyncDriverPacket.H.HeadExtTp = 0x00;
     SyncDriverPacket.H.Magic = 0x05;
     SyncDriverPacket.H.DtSz = sizeof(SyncDriverConfig);
-    std::memset(SyncDriverPacket.D.pU8,0,dHlgrphSS_PkgDtMaxSz);
-    SyncDriverPacket.D.Cfg.FSetDuration = SyncDriverConfig.FSetDuration;
-    SyncDriverPacket.D.Cfg.PolarToggle = SyncDriverConfig.PolarToggle;
-    SyncDriverPacket.D.Cfg.PolarSet = SyncDriverConfig.PolarSet;
-    SyncDriverPacket.D.Cfg.HiTimeDuration = SyncDriverConfig.HiTimeDuration;
-    SyncDriverPacket.D.Cfg.LowTimeDuration = SyncDriverConfig.LowTimeDuration;
-    SyncDriverPacket.D.Cfg.NBand = SyncDriverConfig.NBand;
-    SyncDriverPacket.D.Cfg.NCycle = SyncDriverConfig.NCycle;
-    SyncDriverPacket.D.Cfg.NFSet = SyncDriverConfig.NFSet;
-    if (start)
-        SyncDriverPacket.D.Cfg.Cntrl = 0x11;
-    else
-        SyncDriverPacket.D.Cfg.Cntrl = 0x00;
-
-    ui->logText->append("FSetDuration " + QString::number(SyncDriverPacket.D.Cfg.FSetDuration));
-    ui->logText->append("PolarToggle " + QString::number(SyncDriverPacket.D.Cfg.PolarToggle));
-    ui->logText->append("PolarSet " + QString::number(SyncDriverPacket.D.Cfg.PolarSet));
-    ui->logText->append("HiTimeDuration " + QString::number(SyncDriverPacket.D.Cfg.HiTimeDuration));
-    ui->logText->append("LowTimeDuration " + QString::number(SyncDriverPacket.D.Cfg.LowTimeDuration));
-    ui->logText->append("NBand " + QString::number(SyncDriverPacket.D.Cfg.NBand));
-    ui->logText->append("NCycle " + QString::number(SyncDriverPacket.D.Cfg.NCycle));
-    ui->logText->append("NFSet " + QString::number(SyncDriverPacket.D.Cfg.NFSet));
-    ui->logText->append("Cntrl " + QString::number(SyncDriverPacket.D.Cfg.Cntrl,16));
-
     pSyncDriverClient->write(reinterpret_cast<const char*>(&SyncDriverPacket), sizeof(tSyncDriverPkg_Head) + SyncDriverPacket.H.DtSz);
 }
 
@@ -1114,21 +1125,25 @@ void MainWindow::on_SyncDriverClient_read(){
     if (static_cast<unsigned long>(pSyncDriverClient->bytesAvailable()) >= sizeof(tSyncDriverPkg_Head)){
         pSyncDriverClient->read(reinterpret_cast<char*>(pSyncDriverHead), sizeof(tPkg_Head));           //read header
         switch (pSyncDriverHead->Rqst){
-            case eSyncDriverRqst_Rdr_GetCnfg:
-                ui->logText->append("SyncDriver::eSyncDriverRqst_Rdr_GetCnfg::isRqstR" + QString::number(pSyncDriverHead->isRqstR));
+            case eSyncDriverRqst_Rdr_GetCnfgNew:
+                ui->logText->append("SyncDriver::eSyncDriverRqst_Rdr_GetCnfgNew::isRqstR " + QString::number(pSyncDriverHead->isRqstR));
                 pSyncDriverClient->read(reinterpret_cast<char*>(pSyncDriverData), pSyncDriverHead->DtSz);           //read data
-                ui->logText->append("FSetDuration " + QString::number(pSyncDriverData->Cfg.FSetDuration));
-                ui->logText->append("PolarToggle " + QString::number(pSyncDriverData->Cfg.PolarToggle));
-                ui->logText->append("PolarSet " + QString::number(pSyncDriverData->Cfg.PolarSet));
-                ui->logText->append("HiTimeDuration " + QString::number(pSyncDriverData->Cfg.HiTimeDuration));
-                ui->logText->append("LowTimeDuration " + QString::number(pSyncDriverData->Cfg.LowTimeDuration));
-                ui->logText->append("NBand " + QString::number(pSyncDriverData->Cfg.NBand));
-                ui->logText->append("NCycle " + QString::number(pSyncDriverData->Cfg.NCycle));
-                ui->logText->append("NFSet " + QString::number(pSyncDriverData->Cfg.NFSet));
-                ui->logText->append("Cntrl " + QString::number(pSyncDriverData->Cfg.Cntrl,16));
+                ui->logText->append("FrqRange " + QString::number(pSyncDriverData->CfgNew.FrqRange));
+                ui->logText->append("FSetDuration " + QString::number(pSyncDriverData->CfgNew.Configure.FSetDuration));
+                ui->logText->append("PolarToggle " + QString::number(pSyncDriverData->CfgNew.Configure.PolarToggle));
+                ui->logText->append("PolarSet " + QString::number(pSyncDriverData->CfgNew.Configure.PolarSet));
+                ui->logText->append("HiTimeDuration " + QString::number(pSyncDriverData->CfgNew.Configure.HiTimeDuration));
+                ui->logText->append("LowTimeDuration " + QString::number(pSyncDriverData->CfgNew.Configure.LowTimeDuration));
+                ui->logText->append("NBand " + QString::number(pSyncDriverData->CfgNew.Configure.NBand));
+                ui->logText->append("NCycle " + QString::number(pSyncDriverData->CfgNew.Configure.NCycle));
+                ui->logText->append("NFSet " + QString::number(pSyncDriverData->CfgNew.Configure.NFSet));
+                ui->logText->append("Cntrl " + QString::number(pSyncDriverData->CfgNew.Configure.Cntrl,16));
             break;
             case eSyncDriverRqst_Rdr_SetCnfg:
                 ui->logText->append("SyncDriver::eSyncDriverRqst_Rdr_SetCnfg::isRqstR " + QString::number(pSyncDriverHead->isRqstR));
+            break;
+            case eSyncDriverRqst_Rdr_SetCnfgNew:
+                ui->logText->append("SyncDriver::eSyncDriverRqst_Rdr_SetCnfgNew::isRqstR " + QString::number(pSyncDriverHead->isRqstR));
             break;
             default:
                 ui->logText->append("SyncDriver::unknown");
