@@ -111,6 +111,8 @@ private slots:
 
     void startSyncDriver();
 
+    void stopSyncDriver();
+
     void on_currentAntennaBSpinBox_valueChanged(int arg1);
 
     void on_antennaGainSpin_valueChanged(int arg1);
@@ -130,6 +132,8 @@ private slots:
     void on_antennaADelaySpin_valueChanged(int arg1);
 
     void on_antennaBDelaySpin_valueChanged(int arg1);
+
+    void disconnectSyncDriver();
 
 private:
     Ui::MainWindow *ui;
@@ -171,7 +175,7 @@ private:
     unsigned int frequencyDelay;
     bool internalSync;
     unsigned int quantizerStep;
-    bool qunatizerZeroLevel;
+    bool quantizerType;
     bool oneBitCorrelation;
     bool delayTracking;
     bool fringeStopping;

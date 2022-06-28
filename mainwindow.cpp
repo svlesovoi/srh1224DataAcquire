@@ -41,6 +41,8 @@ MainWindow::MainWindow(QWidget *parent) :
     dataDuration = settings.value("receiver/dataDuration", 2000000).toUInt();
     internalSync = settings.value("receiver/internalSync", 0).toBool();
     oneBitCorrelation = settings.value("receiver/oneBitCorrelation", 0).toBool();
+    quantizerStep = settings.value("receiver/quantizerStep",1000).toUInt();
+    quantizerType = settings.value("receiver/quantizerType",0).toBool();
     delayTracking = settings.value("receiver/delayTracking", 1).toBool();
     fringeStopping = settings.value("receiver/fringeStopping", 1).toBool();
     autoStart = settings.value("receiver/autoStart", 1).toBool();
@@ -510,6 +512,8 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->currentAntennaBSpinBox->setValue(showAntennaB);
     ui->delayTrackingButton->setChecked(delayTracking);
     ui->fringeStoppingButton->setChecked(fringeStopping);
+    ui->SyncDriverSetConfigButton->hide();
+
 //--------------------------------------------------UI---------------------------------------------------------------
 //    localOscillator = new QG7M(localOscillatorIP);
     if (autoStart){
@@ -550,12 +554,8 @@ void MainWindow::on_correlatorClient_disconnected(){
 }
 
 void MainWindow::on_SyncDriverConnect_clicked(bool checked){
-    if (checked)
-        pSyncDriverClient->connectToHost(SyncDriverIP, SyncDriverPort);
-    else{
-        syncDriverStartStop(false);
-        pSyncDriverClient->disconnectFromHost();
-    }
+    autoStart = checked;
+    pSyncDriverClient->connectToHost(SyncDriverIP, SyncDriverPort);
 }
 
 void MainWindow::on_SyncDriverGetConfigButton_clicked(){
@@ -574,11 +574,22 @@ void MainWindow::startSyncDriver(){
     syncDriverStartStop(true);
 }
 
+void MainWindow::stopSyncDriver(){
+    ui->SyncDriverConnect->setChecked(false);
+    ui->SyncDriverSetConfigButton->setChecked(false);
+    syncDriverStartStop(false);
+}
+
+void MainWindow::disconnectSyncDriver(){
+    pSyncDriverClient->disconnectFromHost();
+}
+
 void MainWindow::on_SyncDriverClient_connected(){
     ui->logText->append(QString("SyncDriver connected"));
-    if (autoStart){
+    if (autoStart)
         QTimer::singleShot(10000,this,&MainWindow::startSyncDriver);
-    }
+    else
+        QTimer::singleShot(1000,this,&MainWindow::stopSyncDriver);
 }
 
 void MainWindow::on_SyncDriverClient_disconnected(){
@@ -625,13 +636,7 @@ void MainWindow::syncDriverStartStop(bool start){
 
 
     pSyncDriverClient->write(reinterpret_cast<const char*>(&SyncDriverPacket), sizeof(tSyncDriverPkg_Head) + SyncDriverPacket.H.DtSz);
-
-    SyncDriverPacket.H.Rqst = eSyncDriverRqst_Rdr_GetCnfgNew;
-    SyncDriverPacket.H.isPacked = 0;
-    SyncDriverPacket.H.HeadExtTp = 0x00;
-    SyncDriverPacket.H.Magic = 0x05;
-    SyncDriverPacket.H.DtSz = sizeof(SyncDriverConfig);
-    pSyncDriverClient->write(reinterpret_cast<const char*>(&SyncDriverPacket), sizeof(tSyncDriverPkg_Head) + SyncDriverPacket.H.DtSz);
+    QTimer::singleShot(3000,this,&MainWindow::disconnectSyncDriver);
 }
 
 void MainWindow::on_correlatorClient_parse(){
@@ -717,7 +722,7 @@ void MainWindow::on_correlatorClient_parse(){
                     currentPolarization = pCorrData->Blck.Cfg.InfoSpiDrv.StsSpi.Plrztn;
                     if (currentPolarization == showPolarization && currentFrequency == showFrequency){
                         fpgaTemperature = pCorrData->Blck.Cfg.InfoSpiDrv.StsSpi.Tfpga;
-                        ui->fpgaTemperatureLabel->setText('FPGA temperature ' + QString::number(fpgaTemperature));
+                        ui->fpgaTemperatureLabel->setText("FPGA temperature " + QString::number(fpgaTemperature));
                     }
                     currentFrequency = 0;
                     for (unsigned int f = 0;f < frequencyListSize;++f)
@@ -1027,6 +1032,7 @@ void MainWindow::initDigitalReceivers(){
     ui->logText->append("Culmination " + QString::number(soldat.DCulmination()));
     ui->logText->append("Declination " + QString::number(soldat.DDeclination()));
     setBitWindowPosition(10);
+    on_oneBitCorrelationButton_clicked(false);
 }
 
 void MainWindow::initEphemeris(){
@@ -1343,13 +1349,13 @@ void MainWindow::on_oneBitCorrelationButton_clicked(bool checked){
     static tPkg setRgPacket;
     setTypicalPacketPrefix(&setRgPacket, eRqst_Rdr_SetRgs32);
     setRgPacket.D.Rg32.Rg[0] = 0x0F; //
-    setRgPacket.D.Rg32.Rg[1] = 0xFF; //
+    setRgPacket.D.Rg32.Rg[1] = 0x1FFF; //
     setRgPacket.D.Rg32.Rg[2] = 0x08; //
     setRgPacket.D.Rg32.Rg[3] = 0x0A8;
     if (oneBitCorrelation)
         setRgPacket.D.Rg32.Rg[4] = 0;//
     else
-        setRgPacket.D.Rg32.Rg[4] = quantizerStep | (qunatizerZeroLevel ? 0x80000000 : 0);//
+        setRgPacket.D.Rg32.Rg[4] = quantizerStep | (quantizerType ? 0x80000000 : 0);//
 
     setRgPacket.D.Rg32.Count = 5;
     setRgPacket.H.DtSz = (setRgPacket.D.Rg32.Count + 1)*4;
@@ -1367,7 +1373,7 @@ void MainWindow::on_quantizerSpinBox_valueChanged(int newStep){
 }
 
 void MainWindow::on_pushButton_clicked(bool checked){
-    qunatizerZeroLevel = !checked;
+    quantizerType = !checked;
 }
 
 void MainWindow::on_currentAntennaASpinBox_valueChanged(int newAntA){
